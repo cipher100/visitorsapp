@@ -279,8 +279,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   logo: {
-    width: 240,
-    height: 240,
+    width: 235,
+    height: 235,
     marginRight: 5,
   },
   input: {
