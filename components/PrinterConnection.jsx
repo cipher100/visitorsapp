@@ -13,6 +13,7 @@ import * as Print from "expo-print";
 import { Feather } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
 import * as Animatable from "react-native-animatable";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function PrinterConnection() {
   const badgeRef = useRef();
@@ -21,23 +22,22 @@ export default function PrinterConnection() {
   const [company, setCompany] = useState("");
   const [purpose, setPurpose] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
-  const [visitorCount, setVisitorCount] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [nameError, setNameError] = useState("");
   const [showTip, setShowTip] = useState(true);
   const [readyToPrint, setReadyToPrint] = useState(false);
+  const [visitorData, setVisitorData] = useState(null);
 
   useEffect(() => {
     const timeInterval = setInterval(() => {
       setCurrentTime(new Date().toLocaleString());
     }, 1000);
-
     return () => clearInterval(timeInterval);
   }, []);
 
   useEffect(() => {
     const printBadge = async () => {
-      if (!readyToPrint || visitorCount == null) return;
+      if (!readyToPrint || !visitorData) return;
 
       try {
         const uri = await captureRef(badgeRef, {
@@ -57,38 +57,102 @@ export default function PrinterConnection() {
       } finally {
         setIsPrinting(false);
         setReadyToPrint(false);
+        setVisitorData(null); // clear after printing
         setName("");
         setCompany("");
         setPurpose("");
-
       }
     };
 
     printBadge();
-  }, [visitorCount, readyToPrint]);
+  }, [readyToPrint, visitorData]);
+
+  useEffect(() => {
+    const loadPrinter = async () => {
+      try {
+        const savedPrinter = await AsyncStorage.getItem("selectedPrinter");
+        if (savedPrinter) {
+          const parsedPrinter = JSON.parse(savedPrinter);
+          setSelectedPrinter(parsedPrinter);
+          setShowTip(false);
+          console.log("Loaded saved printer:", parsedPrinter.name);
+        }
+      } catch (e) {
+        console.log("Failed to load saved printer", e);
+      }
+    };
+
+    loadPrinter();
+  }, []);
 
   const handleSelectPrinter = async () => {
-    try {
-      const printer = await Print.selectPrinterAsync();
-      if (printer) {
-        setSelectedPrinter(printer);
-        setShowTip(false);
-        Toast.show({
-          type: "success",
-          text1: "Printer Selected",
-          text2: printer.name,
-          position: "top",
-          visibilityTime: 2000,
-        });
-      }
-    } catch (error) {
-      console.log("Printer selection error:", error);
-      Toast.show({
-        type: "error",
-        text1: "Error selecting printer",
-        text2: error.message || "Please try again",
-      });
-    }
+    Alert.alert("Connect Printer", "Choose how to connect to your printer:", [
+      {
+        text: "Use IP Address",
+        onPress: () => {
+          Alert.prompt(
+            "Enter Printer IP",
+            "Example: 192.168.1.100",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Connect",
+                onPress: async (ip) => {
+                  if (!ip) return;
+                  const manualPrinter = {
+                    name: `Manual IP: ${ip}`,
+                    url: `ipp://${ip}`,
+                  };
+                  setSelectedPrinter(manualPrinter);
+                  await AsyncStorage.setItem(
+                    "selectedPrinter",
+                    JSON.stringify(manualPrinter)
+                  );
+                  setShowTip(false);
+                  Toast.show({
+                    type: "success",
+                    text1: "Printer Set",
+                    text2: `Using IP: ${ip}`,
+                    position: "top",
+                  });
+                },
+              },
+            ],
+            "plain-text"
+          );
+        },
+      },
+      {
+        text: "Search for Printers",
+        onPress: async () => {
+          try {
+            const printer = await Print.selectPrinterAsync();
+            if (printer) {
+              setSelectedPrinter(printer);
+              await AsyncStorage.setItem(
+                "selectedPrinter",
+                JSON.stringify(printer)
+              );
+              setShowTip(false);
+              Toast.show({
+                type: "success",
+                text1: "Printer Selected",
+                text2: printer.name,
+                position: "top",
+              });
+            }
+          } catch (error) {
+            console.log("Printer selection error:", error);
+            Toast.show({
+              type: "error",
+              text1: "Error selecting printer",
+              text2: error.message || "Please try again",
+            });
+          }
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const printLabel = async () => {
@@ -102,7 +166,7 @@ export default function PrinterConnection() {
 
     setIsPrinting(true);
     setNameError("");
-    setVisitorCount(null);
+    setVisitorData(null);
 
     try {
       const response = await fetch(
@@ -116,42 +180,29 @@ export default function PrinterConnection() {
         }
       );
 
-      const result = await response.json();
+      const contentType = response.headers.get("content-type");
+      const responseText = await response.text();
+
+      console.log("Response Status:", response.status);
+      console.log("Content-Type:", contentType);
+      console.log("Raw Response Text:", responseText);
 
       if (!response.ok) {
-        throw new Error(result?.message || "Failed to submit data");
+        throw new Error(`Server returned error: ${response.status}`);
       }
 
-      const count = result?.visitor?.count;
-      if (!count) throw new Error("Missing visitor count in response");
+      if (contentType && contentType.includes("application/json")) {
+        const result = JSON.parse(responseText);
+        const visitor = result?.visitor;
+        if (!visitor?.count) throw new Error("Missing visitor count in response");
 
-      Alert.alert(
-        "Print Preview",
-        `Name: ${name}\nCompany: ${company}\nPurpose: ${purpose}\n\nProceed to print?`,
-        [
-          {
-            text: "Cancel",
-            onPress: () => {
-              setIsPrinting(false);
-            },
-            style: "cancel",
-          },
-          {
-            text: "Print",
-            onPress: () => {
-              setVisitorCount(count);
-              setReadyToPrint(true);
-         
-              setName("");
-              setCompany("");
-              setPurpose("");
-            },
-          },
-        ]
-      );
-      
+        setVisitorData(visitor); 
+        setReadyToPrint(true);
+      } else {
+        throw new Error("Unexpected response format from server");
+      }
     } catch (error) {
-      console.log("Error:", error);
+      console.log("Error during fetch:", error);
       Alert.alert("Error", error.message || "Something went wrong.");
       setIsPrinting(false);
     }
@@ -160,7 +211,10 @@ export default function PrinterConnection() {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.iconButton} onPress={handleSelectPrinter}>
-        <Feather name="printer" size={24} color="#fff" />
+        <Text style={styles.iconButtonText} numberOfLines={1}>
+          {selectedPrinter ? selectedPrinter.name : " "}
+        </Text>
+        <Feather name="printer" size={20} color="#fff" style={{ marginLeft: 6 }} />
       </TouchableOpacity>
 
       {showTip && (
@@ -177,6 +231,7 @@ export default function PrinterConnection() {
           </View>
         </Animatable.View>
       )}
+
       <View style={styles.badgeWrapper}>
         <View style={styles.badge} ref={badgeRef} collapsable={false}>
           <View style={styles.badgeContent}>
@@ -192,7 +247,7 @@ export default function PrinterConnection() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.5}
               >
-                {name || "Visitor Name"}
+                {visitorData?.name || "Visitor Name"}
               </Text>
               <Text
                 style={styles.company}
@@ -200,12 +255,14 @@ export default function PrinterConnection() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.5}
               >
-                {company || " "}
+                {visitorData?.company || " "}
               </Text>
               <Text style={styles.label}>
-                Visitor{visitorCount ? ` ${visitorCount}` : ""}
+                Visitor{visitorData?.count ? ` ${visitorData.count}` : ""}
               </Text>
-              <Text style={styles.dateTimeText}>{currentTime}</Text>
+              <Text style={styles.dateTimeText}>
+                {visitorData?.created_at || currentTime}
+              </Text>
             </View>
           </View>
         </View>
@@ -269,6 +326,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     elevation: 5,
+    flexDirection: "row",
+  },
+  iconButtonText: {
+    color: "white",
+    fontSize: 12,
   },
   printerTip: {
     position: "absolute",
@@ -289,7 +351,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
-    fontSize: 30,
+    fontSize: 24,
   },
   inputError: {
     borderColor: "red",
