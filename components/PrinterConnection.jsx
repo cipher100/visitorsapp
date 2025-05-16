@@ -57,7 +57,7 @@ export default function PrinterConnection() {
       } finally {
         setIsPrinting(false);
         setReadyToPrint(false);
-        setVisitorData(null); // clear after printing
+        setVisitorData(null); 
         setName("");
         setCompany("");
         setPurpose("");
