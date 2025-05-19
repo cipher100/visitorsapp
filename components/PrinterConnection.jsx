@@ -21,6 +21,7 @@ export default function PrinterConnection() {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [contact_number, setContactNumber] = useState("");
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleString());
   const [isPrinting, setIsPrinting] = useState(false);
   const [nameError, setNameError] = useState("");
@@ -61,6 +62,7 @@ export default function PrinterConnection() {
         setName("");
         setCompany("");
         setPurpose("");
+        setContactNumber("");
       }
     };
 
@@ -176,7 +178,7 @@ export default function PrinterConnection() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ name, company, purpose }),
+          body: JSON.stringify({ name, company, purpose, contact_number }),
         }
       );
 
@@ -257,8 +259,8 @@ export default function PrinterConnection() {
               >
                 {visitorData?.company || " "}
               </Text>
-              <Text style={styles.label}>
-                Visitor{visitorData?.count ? ` ${visitorData.count}` : ""}
+             <Text style={styles.label}>
+                {visitorData?.count ? `Visitor ${visitorData.count}` : "Visitor Number"}
               </Text>
               <Text style={styles.dateTimeText}>
                 {visitorData?.created_at || currentTime}
@@ -270,7 +272,7 @@ export default function PrinterConnection() {
 
       <TextInput
         style={[styles.input, nameError ? styles.inputError : null]}
-        placeholder="Enter name"
+        placeholder="name"
         placeholderTextColor="#888"
         value={name}
         onChangeText={(text) => {
@@ -280,18 +282,26 @@ export default function PrinterConnection() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Enter company"
+        placeholder="company"
         placeholderTextColor="#888"
         value={company}
         onChangeText={setCompany}
       />
       <TextInput
         style={styles.input}
-        placeholder="Enter purpose"
+        placeholder="contact number"
+        placeholderTextColor="#888"
+        value={contact_number}
+        onChangeText={setContactNumber}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="purpose"
         placeholderTextColor="#888"
         value={purpose}
         onChangeText={setPurpose}
       />
+      
 
       <TouchableOpacity
         style={[
@@ -351,7 +361,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
-    fontSize: 24,
+    fontSize: 30,
   },
   inputError: {
     borderColor: "red",
@@ -386,7 +396,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   company: {
-    fontSize: 50,
+    fontSize: 40,
   },
   label: {
     fontSize: 40,
